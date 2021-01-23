@@ -88,6 +88,7 @@ for(i in 1:nrow(key)){
       
       tau ~ dgamma(0.1, 0.1)
       phi ~ dgamma(0.1, 0.1)
+      # weakly informative prior for predictor coefficient
       b1 ~ dlogis(0, 1)
       
     }) # end of model code
@@ -162,7 +163,7 @@ for(i in 1:nrow(key)){
       dplyr::select(index, response, parameter, pred, mean:rhat, waic)
     
     
-    # same thing over again, but for mdoels with multiple predictors
+    # same thing over again, but for models with multiple predictors
   } else {
     
     data <- list(response = unname(as.matrix(dplyr::select(act,
@@ -190,8 +191,8 @@ for(i in 1:nrow(key)){
       }
       
       tau ~ dgamma(0.1, 0.1)
-      
       phi ~ dgamma(0.1, 0.1)
+      
       b1 ~ dlogis(0, 1)
       b2 ~ dlogis(0, 1)
       b3 ~ dlogis(0, 1)
@@ -272,6 +273,35 @@ for(i in 1:nrow(key)){
 # one sleek data frame of results
 result_df <- bind_rows(result_list)
 
+# what is the top-ranked model for each period?
+full_join(key, result_df) %>% 
+  dplyr::select(index, response, npreds, pred1, pred2, waic) %>% 
+  dplyr::mutate(pred3 = hablar::if_else_(!is.na(pred2), 
+                                         paste(pred1, pred2, sep = "*"),
+                                         NA)) %>% 
+  dplyr::select(index:pred2, pred3, waic) %>% 
+  distinct(.) %>%
+  group_by(response) %>% 
+  arrange(response, waic) %>% 
+  slice(1)
+
+full_join(key, result_df) %>% 
+  # dplyr::select(index, response, npreds, pred1, pred2, waic) %>% 
+  dplyr::mutate(pred3 = hablar::if_else_(!is.na(pred2), 
+                                         paste(pred1, pred2, sep = "*"),
+                                         NA)) %>% 
+  filter(!is.na(pred3)) %>% 
+  dplyr::select(index, response, pred3, pred, mean, lower, upper) %>% 
+  filter(grepl("\\*", pred)) %>% 
+  ggplot(aes(x = mean, y = pred3, color = response)) + 
+  geom_errorbar(aes(xmin = lower, xmax = upper),
+                width = 0,
+                size = 1,
+                position = position_dodge(width = 0.2)) +
+  theme_classic() + 
+  geom_vline(xintercept = 0, 
+             color = "red", 
+             linetype = 2) 
 
 # save results if you want
 # setwd(here::here("results"))
