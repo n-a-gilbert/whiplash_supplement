@@ -5,7 +5,7 @@ library(parallel)
 library(coda)
 
 setwd(here::here("data"))
-load("whiplashOccModelDataConstants.RData")
+load("whiplashOccModelDataConstants_v02.RData")
 
 #### DATA ####
 # the list named "data" contains 6 matrices 
@@ -15,18 +15,20 @@ str(data)
 # the first is called "covariate"
 # these are the static landscape predictors, measured within a 1100-m buffer of camera locations
 # rows are sites, columns are the different predictors
-# they are, in order: aspect, canopy, canopy^2, elevSD, and shelter
+# they are, in order: aspect, deciduous, deciduous^2, elevSD, open, open^2, and shelter
 # aspect is the proportion of south-facing slopes, calculated from a digital elevation model
-# canopy is the proportion of canopy cover, mean value for the landscape
-# canopy^2 is just canopy squared (for quadratic effect)
+# deciduous is the proportion of deciduous forest in the landscape
+# deciduous^2 is just deciduous squared (for quadratic effect)
 # elevSD is topographic relief, calculated as the standard deviation of elevation
+# open is the proportion of "open" (cropland and grassland) habitat
+# open^2 is just open squared
 # shelter is the proportion of shelter habitat, defined as coniferous, mixed forest and wooded wetlands
 # all predictors are already scaled
 
 # inspect distribution of predictors
 data$covariate %>% 
   as_tibble() %>% 
-  setNames(., c("aspect", "canopy", "canopy2", "elevSD", "shelter")) %>% 
+  setNames(., c("aspect", "deciduous", "deciduous2", "elevSD", "open", "open2", "shelter")) %>% 
   mutate(id = row_number()) %>% 
   pivot_longer(aspect:shelter, names_to = "predictor", values_to = "value") %>% 
   ggplot(., aes(x = value)) + 
@@ -47,7 +49,6 @@ plot(apply(data$weather[,,1], 2, mean)[1:86])
 # here's average cwsi of all sites over the course of the winter - notice how it accumulates
 plot(apply(data$weather[,,2], 2, mean)[1:86])
 
-
 # the third matrix, "year", indicates weather a column (date) is in 2017-2018 or 2018-2019
 # 0 = 2017-2018, 1 = 2018-2019
 plot(data$year[1,])
@@ -66,7 +67,6 @@ plot(data$period[1,1,])
 # finally, the sixth matrix, "y", is the deer detection record
 # rows are sites, columns days, matrix slices are replicate survey periods
 # values can be 0 (deer not detected), 1 (deer detected), or NA (camera not active)
-
 str(data$y[1,,])
 
 # here's a detection history for a single site. this camera was active only in the first winter
@@ -268,10 +268,12 @@ end - start
 key <- tibble(
   parameter = c("a1", paste0("b", "[", 1:constants$npred, "]"),
                 paste0("gamma[", 1:constants$nknots, "]")),
-  name = c("period", "aspect", "canopy", "canopy2", "elevSD", "shelter",
+  name = c("period", "aspect", "deciduous", "deciduous2", "elevSD", "open", "open2", "shelter",
            "tmin", "wsi", "tmin*wsi",
-           "aspect*tmin", "canopy*tmin", "canopy2*tmin", "elevSD*tmin", "shelter*tmin",
-           "aspect*wsi", "canopy*wsi", "canopy2*wsi",  "elevSD*wsi", "shelter*wsi",
+           "aspect*tmin", "deciduous*tmin", "deciduous2*tmin", "elevSD*tmin",
+           "open*tmin", "open2*tmin", "shelter*tmin",
+           "aspect*wsi", "deciduous*wsi", "deciduous2*wsi",  "elevSD*wsi", 
+           "open*wsi", "open2*wsi",  "shelter*wsi",
            "year",
            paste0("spline", 1:constants$nknots)))
 
