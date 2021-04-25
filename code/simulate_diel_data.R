@@ -116,16 +116,16 @@ for(i in 1:(length(dates) - 1)){
   
   # proportion dawn-active
   # dawn is the time between night end and end of morning "golden hour"
-  dawn <- sum(yy[(xx > period_times$nightEnd & xx < period_times$goldenHourEnd)])*dx*(1/(period_times$goldenHourEnd - period_times$nightEnd))
+  dawn <- sum(yy[(xx > period_times$nightEnd & xx < period_times$goldenHourEnd)])*dx
   # proportion dusk-active
   # dusk is time between start of evening "golden hour" and night start
-  dusk <- sum(yy[(xx > period_times$goldenHour & xx < period_times$night)])*dx*(1/(period_times$night - period_times$goldenHour))
+  dusk <- sum(yy[(xx > period_times$goldenHour & xx < period_times$night)])*dx
   #proportion diurnal
   #day is between end of morning golden hour and start of evening golden hour
-  diurnal <- sum(yy[(xx > period_times$goldenHourEnd & xx < period_times$goldenHour)])*dx*(1/(period_times$goldenHour - period_times$goldenHourEnd))
+  diurnal <- sum(yy[(xx > period_times$goldenHourEnd & xx < period_times$goldenHour)])*dx
   #proportion nocturnal
   # night is between midnight and night end plus nigth start until midnight
-  nocturnal <- sum(yy[(xx > 0 & xx < period_times$nightEnd) | (xx > period_times$night)])*dx*(1/((period_times$nightEnd - 0) + (2*pi - period_times$night)))
+  nocturnal <- sum(yy[(xx > 0 & xx < period_times$nightEnd) | (xx > period_times$night)])*dx
 
   period_proportions[i] <- list(tibble(
     date = current_date, 
