@@ -286,22 +286,25 @@ full_join(key, result_df) %>%
   arrange(response, waic) %>% 
   slice(1)
 
+# look at effects of predictors/interactions from top model
 full_join(key, result_df) %>% 
   dplyr::mutate(pred3 = hablar::if_else_(!is.na(pred2), 
                                          paste(pred1, pred2, sep = "*"),
                                          NA)) %>% 
-  filter(!is.na(pred3)) %>% 
-  dplyr::select(index, response, pred3, pred, mean, lower, upper) %>% 
-  filter(grepl("\\*", pred)) %>% 
-  ggplot(aes(x = mean, y = pred3, color = response)) + 
-  geom_errorbar(aes(xmin = lower, xmax = upper),
-                width = 0,
-                size = 1,
-                position = position_dodge(width = 0.2)) +
-  theme_classic() + 
-  geom_vline(xintercept = 0, 
-             color = "red", 
-             linetype = 2) 
+  # dplyr::select(index:pred2, pred3, waic) %>%
+  # distinct(.) %>%
+  dplyr::select(response, pred1, pred2, pred3, pred, mean, lower, upper, waic) %>%
+  group_by(response) %>% 
+  arrange(response, waic) %>% 
+  filter(waic == min(waic)) %>% 
+  pivot_longer(pred1:pred3, names_to = "junk", values_to = "name") %>% 
+  filter(name == pred) %>% 
+  filter(!is.na(name)) %>% 
+  ggplot(aes(x = mean, y = name, color = response)) + 
+  geom_errorbar(aes(xmin = lower, xmax = upper), size = 2,
+                position = position_dodge(width = 0.4),
+                width = 0) + 
+  geom_vline(xintercept = 0, color = "red")
 
 # save results if you want
 # setwd(here::here("results"))
