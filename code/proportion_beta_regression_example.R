@@ -23,7 +23,8 @@ setwd(here::here("data"))
 # CWSI: cumulative winter severity index, statewide average
 # TMIN: daily minimum temperature, statewide average
 # SNOW: daily snow depth, statewide average
-dat <- readr::read_csv("activity_proportions_predictors_v01.csv")
+dat <- readr::read_csv("activity_proportions_predictors_v01.csv") %>% 
+  rename(pdawn = Dawn, pdusk = Dusk, pdiurnal = Day, pnocturnal = Night)
 
 # inspect
 glimpse(dat)
@@ -286,7 +287,6 @@ full_join(key, result_df) %>%
   slice(1)
 
 full_join(key, result_df) %>% 
-  # dplyr::select(index, response, npreds, pred1, pred2, waic) %>% 
   dplyr::mutate(pred3 = hablar::if_else_(!is.na(pred2), 
                                          paste(pred1, pred2, sep = "*"),
                                          NA)) %>% 
