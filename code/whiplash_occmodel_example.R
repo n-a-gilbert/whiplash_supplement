@@ -8,7 +8,7 @@ setwd(here::here("data"))
 load("whiplashOccModelDataConstants_v02.RData")
 
 #### DATA ####
-# the list named "data" contains 6 matrices 
+# the list named "data" contains 5 matrices 
 
 str(data)
 
@@ -28,30 +28,25 @@ str(data)
 # inspect distribution of predictors
 data$covariate %>% 
   as_tibble() %>% 
-  setNames(., c("aspect", "deciduous", "deciduous2", "elevSD", "open", "open2", "shelter")) %>% 
+  setNames(., c("relief", "deciduous", "deciduous2", "open", "open2", "conifer", "conifer2")) %>% 
   mutate(id = row_number()) %>% 
-  pivot_longer(aspect:shelter, names_to = "predictor", values_to = "value") %>% 
+  pivot_longer(relief:conifer2, names_to = "predictor", values_to = "value") %>% 
   ggplot(., aes(x = value)) + 
   geom_histogram() + 
-  facet_wrap(~predictor)
+  facet_wrap(~predictor, scales = "free")
 
 # the second matrix contains daily minimum temperature (tmin) and cumulative winter severity index (cwsi)
 # rows are sites, columns days, matrix slices are tmin/cwsi
 # columns 1-86 are the winter of 2017-2018, 87-172 are 2018-2019
 # values are already scaled
-
 # example: this shows tmin for one site over the course of the first winter
-plot(data$weather[1,1:86,1]) 
+plot(data$weather[1,1:86,1,1]) 
 
 # here's average tmin of all sites over the course of the first winter
-plot(apply(data$weather[,,1], 2, mean)[1:86])
+plot(apply(data$weather[,,1,1], 2, mean)[1:86])
 
 # here's average cwsi of all sites over the course of the winter - notice how it accumulates
-plot(apply(data$weather[,,2], 2, mean)[1:86])
-
-# the third matrix, "year", indicates weather a column (date) is in 2017-2018 or 2018-2019
-# 0 = 2017-2018, 1 = 2018-2019
-plot(data$year[1,])
+plot(apply(data$weather[,,1,2], 2, mean)[1:86])
 
 # the fourth matrix, "zmat" is for the spatial random effect. 
 # it provides, for each camera location (row), the distance to 20 knot locations (columns)
@@ -62,15 +57,15 @@ plot(data$year[1,])
 # 08:00-16:00 hrs (1), or 16:00-00:00 hrs(0)
 str(data$period)
 # for one site on one day
-plot(data$period[1,1,])
+plot(data$period[1,1,,1])
 
 # finally, the sixth matrix, "y", is the deer detection record
-# rows are sites, columns days, matrix slices are replicate survey periods
+# rows are sites, columns days, 3rd matrix slices are replicate survey periods, 4th matrix slice is year
 # values can be 0 (deer not detected), 1 (deer detected), or NA (camera not active)
-str(data$y[1,,])
+str(data$y)
 
 # here's a detection history for a single site. this camera was active only in the first winter
-data$y[1,,]
+data$y[1,,,]
 
 #### CONSTANTS ####
 # the object "constants" is a list of constants in the model
@@ -79,6 +74,7 @@ str(constants)
 # nsite - number of camera locations
 # nday - total number of days
 # nsurvey - number of replicate surveys in one day
+# nyear - number of years
 # nknots - number of knots for spatial random effect
 # nweather  - number of weather predictors
 # wstart - index for where weather predictors start in linear predictor of model
@@ -111,24 +107,34 @@ myCode <- nimbleCode({
   
   # priors for the spatial random effect penalized spline
   # gamma is just a normal linear predictor
-  # sd_bs is the precicsion
+  # sd_bs is the precision
   for(i in 1:nknots){
     gamma[i] ~ dnorm(0, sd_bs[i])
-    sd_bs[i] ~ dunif(0, 2)
+    sd_bs[i] ~ dgamma(1, 2)
   }
   
   # prior for the period predictor in the observation submodel
   a1 ~ dlogis(0, 1)
   
-  # prior for random effect in observation submodel 
+  # prior for random intercept for year
+  for(k in 1:nyear){
+    eps_psi[k] ~ dnorm(0, sd_eps_psi)
+  }
+  
+  # and precision
+  sd_eps_psi ~ dgamma(1, 2)
+  
+  # prior for site/survey random effect
   for(i in 1:nsite){
     for(j in 1:nday){
-      eps_p[i, j] ~ dnorm(0, sd_eps_p)
+      for(k in 1:nyear){
+        eps_p[i, j, k] ~ dnorm(0, sd_eps_p)
+      }
     }
   }
   
   # and its precision
-  sd_eps_p ~ dunif(0, 2)
+  sd_eps_p ~ dgamma(1, 2)
   
   # .............................................................
   # LIKELIHOOD
@@ -137,51 +143,53 @@ myCode <- nimbleCode({
   # state model - ecological process
   for(i in 1:nsite){
     for(j in 1:nday){
-      
-      z[i, j] ~ dbern(psi[i, j])
-      
-      logit(psi[i, j]) <- inprod(covariate[i,1:nland], b[1:nland]) + # landscape patterns
-        inprod(weather[i, j, 1:nweather], b[wstart:wend]) + # tmin & cwsi
-        b[tw]*weather[i,j,1]*weather[i, j, 2] + # tmin*cwsi interaction
-        inprod(covariate[i, 1:nland]*weather[i, j, 1], b[tintstart:tintend]) + # landscape*tmin interactions
-        inprod(covariate[i, 1:nland]*weather[i, j, 2], b[wintstart:wintend]) + # landscape*cwsi interactions
-        b[npred]*year[i, j] + # separate intercept for year
-        inprod(zmat[i, 1:nknots], gamma[1:nknots]) # SRE
-      
-      # detection submodel - observation process
-      for(k in 1:nsurvey){
+      for(k in 1:nyear){
         
-        y[i, j, k] ~ dbern(z[i, j]*p[i, j, k])
-        logit(p[i, j, k]) <- a1*period[i, j, k] + eps_p[i, j]
+        z[i, j, k] ~ dbern(psi[i, j, k])
         
-      } # nsurvey
+        logit(psi[i, j, k]) <- inprod(covariate[i,1:nland], b[1:nland]) + # landscape patterns
+          inprod(weather[i, j, k, 1:nweather], b[wstart:wend]) + # tmin & wsi
+          b[tw]*weather[i,j, k, 1]*weather[i, j, k, 2] + # tmin*wsi interaction
+          inprod(covariate[i, 1:nland]*weather[i, j, k, 1], b[tintstart:tintend]) + # landscape*tmin interactions
+          inprod(covariate[i, 1:nland]*weather[i, j, k, 2], b[wintstart:wintend]) + # landscape*wsi interactions
+          inprod(zmat[i, 1:nknots], gamma[1:nknots]) + # spatial random effect
+          eps_psi[k] # random intercept for year
+        
+        # detection submodel - observation process
+        for(m in 1:nsurvey){
+          
+          y[i, j, m, k] ~ dbern(z[i, j, k]*p[i, j, m, k])
+          logit(p[i, j, m, k]) <- a1*period[i, j, m, k] + eps_p[i, j, k]
+        } # nsurvey 
+      } # nyear
     } # nday
   } # nsite
 }) # model
 
+
 # initial values for running model
 inits <- function() {list(p = array(0.5, dim = c(constants$nsite,
                                                  constants$nday,
-                                                 constants$nsurvey)),
-                          z = array(1, dim = c(constants$nsite, constants$nday)),
-                          y = array(1, dim = c(constants$nsite, constants$nday, constants$nsurvey)),
+                                                 constants$nsurvey,
+                                                 constants$nyear)),
+                          z = array(1, dim = c(constants$nsite, constants$nday, constants$nyear)),
+                          y = array(1, dim = c(constants$nsite, constants$nday, constants$nsurvey, constants$nyear)),
                           b = runif(constants$npred, -1, 1),
                           a1 = runif(1, -1, 1), 
                           gamma = runif(constants$nknots, -1, 1),
                           sd_bs = runif(constants$nknots, 0, 2),
-                          eps_p = array(rnorm(constants$nsite*constants$nday, 0, 2),
-                                        dim = c(constants$nsite, constants$nday)),
-                          sd_eps_p = runif(1, 0, 2))}
-
+                          eps_p = array(rnorm(constants$nsite*constants$nday*constants$nyear, 0, 2),
+                                        dim = c(constants$nsite, constants$nday, constants$nyear)),
+                          sd_eps_p = runif(1, 0, 2),
+                          eps_psi = rnorm(constants$nyear, 0, 2),
+                          sd_eps_psi = runif(1, 0, 2))}
 
 # parameters to monitor
-keepers <- c("b", "a1", "gamma")
-
+keepers <- c("b", "a1", "gamma", "eps_psi")
 
 # OPTION 1 - NOT RECOMMENDED - RUN CHAINS ONE AFTER ANOTHER
 # this is a big model and takes a long time to run - better to 
 # do option #2 and run in parallel 
-
 # model <- nimbleModel(code = myCode,
 #                      constants = constants,
 #                      data = data,
@@ -266,21 +274,20 @@ end - start
 
 # key for parameter names
 key <- tibble(
-  parameter = c("a1", paste0("b", "[", 1:constants$npred, "]"),
+  parameter = c("a1",
+                paste0("b", "[", 1:constants$npred, "]"),
                 paste0("gamma[", 1:constants$nknots, "]")),
-  name = c("period", "aspect", "deciduous", "deciduous2", "elevSD", "open", "open2", "shelter",
+  name = c("period",
+           "relief", "deciduous", "deciduous2", "open", "open2", "conifer", "conifer2",
            "tmin", "wsi", "tmin*wsi",
-           "aspect*tmin", "deciduous*tmin", "deciduous2*tmin", "elevSD*tmin",
-           "open*tmin", "open2*tmin", "shelter*tmin",
-           "aspect*wsi", "deciduous*wsi", "deciduous2*wsi",  "elevSD*wsi", 
-           "open*wsi", "open2*wsi",  "shelter*wsi",
-           "year",
+           "relief*tmin", "deciduous*tmin", "deciduous2*tmin", "open*tmin", "open2*tmin", "conifer*tmin", "conifer2*tmin",
+           "relief*wsi", "deciduous*wsi", "deciduous2*wsi", "open*wsi", "open2*wsi", "conifer*wsi", "conifer2*wsi",
            paste0("spline", 1:constants$nknots)))
 
 outmcmc <- as.mcmc(out)
 
 # calculate rhat, should be < 1.1 to be considered converged
-rhat <- as_tibble(coda::gelman.diag(outmcmc[,1:40])[[1]],
+rhat <- as_tibble(coda::gelman.diag(outmcmc[,1:47])[[1]],
                   rownames = "parameter") %>% 
   setNames(., c("parameter", "rhat", "upper")) %>% 
   dplyr::select(-upper)
@@ -288,7 +295,7 @@ rhat <- as_tibble(coda::gelman.diag(outmcmc[,1:40])[[1]],
 samps <- do.call(rbind, out)
 
 # results bundled up nicely
-res <- as.data.frame(samps[, 1:40]) %>% 
+res <- as.data.frame(samps[, 1:47]) %>% 
   pivot_longer(`a1`:`gamma[20]`, names_to = "parameter", values_to = "value") %>% 
   group_by(parameter) %>% 
   mutate(mean = mean(value),
