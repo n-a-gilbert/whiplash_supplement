@@ -14,32 +14,19 @@ library(coda)
 
 setwd(here::here("data"))
   
-# season: indicates which winter (1  = 2017-2018, 2 = 2018-2019)
-# date: date
-# pdawn: proportion of activity occuring during dawn period
-# pdusk: proportion of activity occuring during dusk period
-# pdiurnal: proportion of activity occurring during day period
-# pnocturnal: proportion of activity occuring during night period
-# CWSI: cumulative winter severity index, statewide average
-# TMIN: daily minimum temperature, statewide average
-# SNOW: daily snow depth, statewide average
-dat <- readr::read_csv("activity_proportions_predictors_v01.csv") %>% 
-  rename(pdawn = Dawn, pdusk = Dusk, pdiurnal = Day, pnocturnal = Night)
+# id: date_id (i.e., 15 dec = 1, etc.)
+# pdawn: proportion of activity occuring during dawn period (2 winters have separate columns)
+# pdusk: proportion of activity occuring during dusk period (2 winters have separate columns)
+# pdiurnal: proportion of activity occurring during day period (2 winters have separate columns)
+# pnocturnal: proportion of activity occuring during night period (2 winters have separate columns)
+# CWSI: cumulative winter severity index, statewide average (2 winters have separate columns)
+# SNOW: daily snow depth, statewide average (2 winters have separate columns)
+# TMIN: daily minimum temperature anomaly (from 1980-2019 mean), statewide average (2 winters have separate columns)
+act <- readr::read_csv("activity_proportions_predictors_v03.csv") 
 
 # inspect
-glimpse(dat)
-
-# reformat data so each year of data has a separate column
-act <- dat %>% 
-  dplyr::mutate_at(vars(CWSI:SNOW), function(x) as.vector(scale(x))) %>% 
-  group_by(season) %>% 
-  mutate(id = row_number()) %>%
-  dplyr::select(-date) %>% 
-  pivot_wider(names_from = season, values_from = pdawn:SNOW)
-
-# following?
 glimpse(act)
-  
+
 # this is a key that will help us track through the different models
 key <- tibble(
   index = 1:20, 
